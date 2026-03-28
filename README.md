@@ -1,64 +1,290 @@
-# README
+# STM32 Interrupt-Driven LED Counter
 
-### **Funcionamiento del proyecto**
+A low-level STM32 project written in ARM assembly that drives a 10-bit LED counter using EXTI button interrupts and SysTick timing.
 
-EL proyecto está conformado por 10 led que muestran el valor binario de una variable, dichos led van prendiendo indicando una valor binario el cual va incrementando a una velocidad de x1 a x4 por medio de un boton y por medio de otro la cuenta decrementa.
+The project uses 10 LEDs to display the binary value of a counter. One button changes the counter speed from **x1** to **x4**, while another button changes the counting direction. The implementation is based on direct GPIO configuration, interrupt handling, and timer-driven control on an STM32 Blue Pill board.
 
-### **Paquetes Necesarios:**
+> **Current scope**: GPIO setup, EXTI interrupt handling, SysTick initialization, speed control, direction changes, binary LED output, assembly build process, and flashing the generated binary to an STM32 Blue Pill board.
 
-Para el funcionamiento de la blue pill se requiere de los siguientes softwares.
+---
 
-- El compilador cruzado que permite generar código máquina para microcontroladores.
-- La instalación de los paquetes de Stlink mediante el entorno de MinGW.
-- La instalación del STM32CubeProg para realizar la grabación del programa.
+## Contents
 
-### **Alias necesarios**
+- [Overview](#overview)
+- [System Behavior](#system-behavior)
+- [Hardware and Software Requirements](#hardware-and-software-requirements)
+- [Required Toolchain](#required-toolchain)
+- [Build and Flash](#build-and-flash)
+- [Implementation Overview](#implementation-overview)
+- [Delay Routine](#delay-routine)
+- [SysTick Initialization](#systick-initialization)
+- [SysTick Handler](#systick-handler)
+- [Main Routine](#main-routine)
+- [Speed Control](#speed-control)
+- [EXTI Interrupt Handler](#exti-interrupt-handler)
+- [Hardware Configuration Diagram](#hardware-configuration-diagram)
+- [Notes](#notes)
 
-- Aliar arm-gcc=arm-none-eab-gcc
-- Aliar arm-as-arm-none-eabi-as
-- Alias arm-objdumo=arm-none-eabi-objdump
-- Alias arm-objcopy=arm-none-eabi-objcopy
+---
 
-### **Compilación del software**
+## Overview
 
-En caso de que el código sea una clonación del repositorio de github, se debe desvincular con el comando make unlink
+This project implements a binary LED counter on an STM32 Blue Pill board using ARM assembly.
 
-Limpiamos el proyecto de los archivos objetos de un anterior ensamble con el comando make clean.
+The counter value is displayed through **10 LEDs**, where each LED represents one bit of the current value. Button inputs are handled through **external interrupts (EXTI)**, and timing behavior is controlled through **SysTick**.
 
-Para realizar el ensamble se debe escribir el comando make, el cual creara los archivos objetos correspondientes y de igual manera el archivo prog.bin
+The project focuses on:
 
-Corremos el software STM32CubeProgrammer para grabar la blue pill, seleccionando la dirección de memoria 0x080000000 e iniciamos el grabado buscando el archivo prog.bin y descargándolo en la memoria del microcontrolador.
+- low-level GPIO control
+- interrupt-driven input handling
+- timer-based control with SysTick
+- binary output through LEDs
+- ARM assembly implementation on STM32
 
-### delay
+---
 
-La funcion del delay es un loop que retrasa el funcionamiento. En dicha funcion utilizamos r0 moviendolo para en el loop compararlo con cero y asi continuar hasta que sean iguales.
+## System Behavior
 
-### SysTick_initialize
+The application displays a binary counter using 10 LEDs.
 
-Para realizar el setup del SysTick  inicializando ***SYSTICK_BASE*** y despues desactivamos el SysTick IRQ  para que funcione con nuestro reloj, despues cargamos un valor para que sea el intervalo, dicho valor se guarda en STK_LOAD-OFFSET, pasamos a limpiar el valor colocando un 0 en STK_VAL_OFFSET. Para ponerle la prioridad al SysTick cargamos SC_BASE y por medio de una suma inicializamos SCB_SHPR3_OFFSET. Al utlimo habilitamos el reloj con un #3 al usar la operacion orr entre dicho numero y STL_CTRL_OFFSET.
+The main behavior is:
 
-### SysTick_Handler
+- the LEDs show the current counter value in binary
+- one button changes the update speed from **x1** to **x4**
+- another button changes the counting direction
+- the counter is updated over time using SysTick-based timing
 
-Con este archivo restamos 1 a r10 y termina su funcion.
+This creates a simple interrupt-driven firmware example where hardware input changes the runtime behavior of the counter.
 
-### Main
+---
 
-Al igual que en la practica anterior inicializaremos los puertos de salida para los leds, siendo del puerto A9 - A0 y como entrada los puertos A11 y A10. 
+## Hardware and Software Requirements
 
-Configuramos EXTI cargando en r0 el AFIO_BASE (Alternative function), luego limpiaremos el r1 para ponerle AFIO_EXTICR3_OFFSET para que se puedan usar correctamente los puertos A11 y A10. Cargamos EXTI_BASE, despues cargamos 0XC00 para cargar los eventos de los puertos.
+### Hardware
+- STM32 Blue Pill board
+- 10 LEDs
+- 2 push buttons
+- ST-Link programmer
+- Circuit wiring based on the included diagram
 
-Configuramos NVIC (Nested vector invict controler), cargamos NVIC_BASE para atender la solicitud del EXTI el cual habilitamos con la instruccion str r1, [r0, NVIC_ISER1_OFFSET]. Al ultimoconfiguramos para que se inicialice el Systick
+### Software
+- ARM cross-compilation toolchain
+- ST-Link utilities
+- STM32CubeProgrammer
+- MinGW or equivalent terminal environment
+- `make`
 
-### check_speed
+---
 
-Con esta funcion realizamos el cambio de velocidad de encendido de los led por medio de los incrementos (delay), cargamos en r8 siendo este (speed) y en un loop realizaremos la compracion don de si speed es 1 regresamos un delay de 1000, si es 2 un delay de 500, si es 3 un delay de 250 y si es 4 de 125 y regresara despues a 1000 siendo 1, al ser diferente de las opciones.
+## Required Toolchain
 
-### EXTI15_10_heandler
+The project requires a standard ARM embedded toolchain for assembling, linking, and generating the binary file for the microcontroller.
 
-El EXTI utilizado es el del 15 al 10, más en especifico los 11 y 10. Cargamos EXTI_BASE, cargamos EXTI_PR_OFFSET, cargamos la direccion de EXTI10, si se activa se sumara r8 y se guardara en PR_OFFSET, y se limpia para cuando no se active. y revisara si el EXTI11 se presiono, si es así ira a EXTI11_HANDLER donde negara el registo y realizara una operacion and para que se guarde  PR_PFFSET y en caso de que ninguno este apretado se saldra de las interuppciones EXTI
+Typical tools used:
 
- veremos si esta prendido si este prende iremops al **`EXTI10_Handler`** en donde vamos a sumar r5 (speed) lo guardamos en el PR_OFFSET y luego lo limpiamos para volverlo a guardar en caso que el EXTI10 no se presione vera si el EXTI11 si se presiono en caso que si entrara a **`EXTI11_Handler`** en donde hara negar el registro y luego hara un and para luego que gurade en PR_PFFSET en caso que tampoco este saltra de la interrupcion EXTI.
+- `arm-none-eabi-gcc`
+- `arm-none-eabi-as`
+- `arm-none-eabi-objdump`
+- `arm-none-eabi-objcopy`
 
-### Diagrama de configuración del hardware
+Optional aliases:
 
-![Untitled](Circuito/Untitled.png)
+```bash
+alias arm-gcc=arm-none-eabi-gcc
+alias arm-as=arm-none-eabi-as
+alias arm-objdump=arm-none-eabi-objdump
+alias arm-objcopy=arm-none-eabi-objcopy
+```
+
+Additional required tools:
+
+- ST-Link packages
+- STM32CubeProgrammer for flashing the generated binary
+
+---
+
+## Build and Flash
+
+If the project was cloned from GitHub and includes repository-specific linking logic, unlink it first if needed:
+
+```bash
+make unlink
+```
+
+Clean previous object files:
+
+```bash
+make clean
+```
+
+Build the project:
+
+```bash
+make
+```
+
+This process generates the corresponding object files and the final binary file, typically:
+
+```text
+prog.bin
+```
+
+To flash the board:
+
+1. Open **STM32CubeProgrammer**
+2. Connect the Blue Pill board through ST-Link
+3. Select the target memory address:
+   ```text
+   0x08000000
+   ```
+4. Load `prog.bin`
+5. Start the flashing process
+
+---
+
+## Implementation Overview
+
+The project is organized around the following low-level components:
+
+- GPIO configuration for LED outputs and button inputs
+- SysTick setup for timing control
+- interrupt handling through EXTI lines
+- speed adjustment logic
+- direction control logic
+- binary output through 10 LEDs
+
+The implementation is written in ARM assembly and works directly with STM32 registers.
+
+---
+
+## Delay Routine
+
+The `delay` routine is implemented as a loop that slows down execution.
+
+It uses register comparisons to keep the processor in a wait cycle until the delay count reaches zero. This routine helps create visible timing differences in the LED counter behavior.
+
+Its purpose is to:
+
+- slow down counter updates
+- support visible changes in output speed
+- provide a simple software-based delay mechanism
+
+---
+
+## SysTick Initialization
+
+The `SysTick_initialize` routine configures the SysTick timer for periodic timing control.
+
+Its main steps are:
+
+- initialize the **SysTick base address**
+- disable the SysTick interrupt while configuring it
+- load the interval value into `STK_LOAD_OFFSET`
+- clear the current timer value in `STK_VAL_OFFSET`
+- set SysTick priority through the system control block
+- enable the clock and timer control
+
+This routine prepares SysTick to act as the time base for the counter update behavior.
+
+---
+
+## SysTick Handler
+
+The `SysTick_Handler` routine performs a simple countdown operation by decrementing a register value used for timing control.
+
+In this implementation, it subtracts `1` from `r10`, which is used as part of the timing workflow.
+
+Its purpose is to:
+
+- provide periodic timer ticks
+- update the internal countdown state
+- support speed-dependent counter timing
+
+---
+
+## Main Routine
+
+As in the previous laboratory setup, the main routine initializes GPIO pins for both outputs and inputs.
+
+### Pin usage
+- **PA0 to PA9**: LED outputs
+- **PA10 and PA11**: button inputs
+
+The routine then configures:
+
+- GPIO ports
+- EXTI lines for button interrupts
+- NVIC for interrupt handling
+- SysTick for timer-based control
+
+A simplified view of the setup flow is:
+
+```text
+1. Configure LED pins as outputs
+2. Configure button pins as inputs
+3. Configure EXTI for PA10 and PA11
+4. Enable EXTI interrupt handling in NVIC
+5. Initialize SysTick
+6. Run the counter logic using current speed and direction
+```
+
+This establishes the complete runtime environment for the application.
+
+---
+
+## Speed Control
+
+The `check_speed` routine controls the counter update speed.
+
+It uses a speed register and maps each speed level to a delay value. The sequence cycles through four different speed settings:
+
+- **speed 1** → delay `1000`
+- **speed 2** → delay `500`
+- **speed 3** → delay `250`
+- **speed 4** → delay `125`
+
+After the highest speed level, it returns to the initial delay.
+
+This provides a simple speed cycle from **x1** to **x4**.
+
+---
+
+## EXTI Interrupt Handler
+
+The EXTI interrupt logic is based on lines **10 and 11**, handled through the `EXTI15_10_Handler`.
+
+The routine checks whether **EXTI10** or **EXTI11** triggered the interrupt and then updates the corresponding runtime behavior.
+
+### EXTI10
+Used to update the speed configuration.
+
+### EXTI11
+Used to change the counting direction.
+
+The handler works by:
+
+- reading the EXTI pending register
+- identifying which interrupt line was triggered
+- updating the corresponding control register or variable
+- clearing the pending bit so the interrupt can be handled again later
+
+This allows the system to react immediately to button presses without relying only on polling.
+
+---
+
+## Hardware Configuration Diagram
+
+The repository includes the hardware reference diagram used for the project:
+
+![Hardware Configuration Diagram](Circuito/Untitled.png)
+
+---
+
+## Notes
+
+- The project is focused on low-level firmware concepts using ARM assembly on STM32.
+- The implementation assumes an STM32 Blue Pill setup and compatible wiring.
+- Pin assignments can be adjusted if a different hardware layout is required.
+- SysTick is used as the timing source for the counter behavior.
+- EXTI lines 10 and 11 are used for button-triggered interrupt handling.
+- Build and flashing steps may vary slightly depending on the local toolchain and operating system setup.
